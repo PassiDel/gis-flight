@@ -1,4 +1,5 @@
 public/map
+public/overlay
 # Created by https://www.toptal.com/developers/gitignore/api/webstorm+all,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=webstorm+all,node
 
@@ -184,6 +185,8 @@ dist
 # .idea/modules
 # *.iml
 # *.ipr
+
+.idea/
 
 # CMake
 cmake-build-*/

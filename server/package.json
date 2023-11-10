@@ -1,0 +1,23 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "module": "src/main.ts",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "dev": "tsx watch src/main.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@hono/node-server": "^1.2.0",
+    "@hono/zod-validator": "^0.1.11",
+    "flightradar24-client": "^1.0.1",
+    "hono": "^3.9.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.2.2",
+    "zod": "^3.22.4"
+  }
+}
