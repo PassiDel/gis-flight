@@ -1,43 +1,44 @@
 declare module 'flightradar24-client' {
-  function fetchFlight(flight: any): Promise<{
-    id: any;
-    callsign: any;
-    liveData: any;
-    model: any;
-    registration: any;
-    airline: any;
+  function fetchFlight(flight: string): Promise<{
+    id: string | null;
+    callsign: string | null;
+    liveData: boolean;
+    model: string | null;
+    registration: string | null;
+    airline: string | null;
     origin: {
-      id: any;
-      name: any;
+      id: string | null;
+      name: string | null;
       coordinates: {
-        latitude: any;
-        longitude: any;
-        altitude: any;
+        latitude: number | null;
+        longitude: number | null;
+        altitude: number | null;
       };
-      timezone: any;
-      country: any;
+      timezone: string | null;
+      country: string | null;
     };
     destination: {
-      id: any;
-      name: any;
+      id: string | null;
+      name: string | null;
       coordinates: {
-        latitude: any;
-        longitude: any;
-        altitude: any;
+        latitude: number | null;
+        longitude: number | null;
+        altitude: number | null;
       };
-      timezone: any;
-      country: any;
+      timezone: string | null;
+      country: string | null;
     };
-    departure: any;
-    scheduledDeparture: any;
-    departureTerminal: any;
-    departureGate: any;
-    arrival: any;
-    scheduledArrival: any;
-    arrivalTerminal: any;
-    arrivalGate: any;
-    delay: any;
+    departure: string | null;
+    scheduledDeparture: string | null;
+    departureTerminal: string | null;
+    departureGate: string | null;
+    arrival: string | null;
+    scheduledArrival: string | null;
+    arrivalTerminal: string | null;
+    arrivalGate: string | null;
+    delay: number | null;
   }>;
+
   function fetchFromRadar(
     north: number,
     west: number,
@@ -58,24 +59,24 @@ declare module 'flightradar24-client' {
   ): Promise<
     {
       id: string;
-      registration: string;
-      flight: string;
-      callsign: string;
-      origin: string;
-      destination: string;
+      registration: string | null;
+      flight: string | null;
+      callsign: string | null;
+      origin: string | null;
+      destination: string | null;
       latitude: number;
       longitude: number;
       altitude: number;
       bearing: number;
-      speed: number;
+      speed: number | null;
       rateOfClimb: number;
       isOnGround: boolean;
       squawkCode: string;
-      model: string;
-      modeSCode: string;
+      model: string | null;
+      modeSCode: string | null;
       radar: string;
       isGlider: boolean;
-      timestamp: number;
+      timestamp: number | null;
     }[]
   >;
 }
