@@ -2,6 +2,9 @@ import './style.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import 'leaflet-rotatedmarker';
+import 'leaflet-easybutton';
+
+import grid from './grid.geojson?raw';
 
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution:
@@ -22,6 +25,20 @@ const aero = L.tileLayer('overlay/{z}/{x}/{y}.png', {
   maxZoom: 11,
   minZoom: 4
 });
+
+const gridLayer = new L.GeoJSON<{ id: number; x: number; y: number }>(
+  JSON.parse(grid) as any,
+  {
+    style: function (_feature) {
+      return {
+        color: 'green'
+      };
+    }
+  }
+).bindPopup(function (layer) {
+  const { x, y } = (layer as any).feature.properties;
+  return `${x} - ${y}`;
+});
 const baseLayers = {
   // "Mapbox": mapbox,
   OpenStreetMap: osm,
@@ -29,7 +46,8 @@ const baseLayers = {
 };
 
 const overlays = {
-  VLR: aero
+  VLR: aero,
+  Grid: gridLayer
   // "Roads": roadsLayer
 };
 
@@ -89,6 +107,7 @@ const data = [
   }
 ];
 
+// TODO: get type from d.ts and remove const data
 function flightsToMarker(flights: typeof data) {
   return flights.map((f) => {
     return L.marker([f.latitude, f.longitude], {
@@ -139,3 +158,31 @@ const fetchFlights = async () => {
 map.on('moveend', fetchFlights);
 
 await fetchFlights();
+
+let interval: number = 0;
+
+L.easyButton({
+  states: [
+    {
+      stateName: 'enable-rt',
+      icon: '<span class="star">🛫</span>',
+      title: 'Enable real-time',
+      onClick: function (btn) {
+        // and its callback
+        interval = setInterval(fetchFlights, 1500);
+
+        btn.state('disable-rt');
+      }
+    },
+    {
+      stateName: 'disable-rt',
+      icon: '<span class="star">🛬</span>',
+      title: 'Disable real-time',
+      onClick: function (btn) {
+        clearInterval(interval);
+
+        btn.state('enable-rt');
+      }
+    }
+  ]
+}).addTo(map);

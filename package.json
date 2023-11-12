@@ -14,6 +14,7 @@
     "@hono/client": "^0.0.3",
     "@types/leaflet-rotatedmarker": "^0.2.5",
     "hono": "^3.9.2",
+    "leaflet-easybutton": "^2.4.0",
     "typescript": "^5.0.2",
     "vite": "^4.4.5"
   },
