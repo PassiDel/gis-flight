@@ -1,5 +1,14 @@
 # Flightradar
 
+## Requirements
+The system is designed to run on a Raspberry 4 with debian linux installed. A ESP32 chip needs to be connected via serial USB interface. It needs the `hardware/serial_neopixel_command` installed on it. 
+
+Other requirements are:
+- python 3.10
+- node.js 18
+- npm 22
+
+
 ## Getting started
 
 Download the `EPSG3857 Tiles` from [OpenFlightMaps](https://www.openflightmaps.org/ed-germany/?airac=2311&language=local), unzip and copy the `/clip/aero/512/latest` folder to `./public/overlay`.
