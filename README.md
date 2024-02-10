@@ -6,7 +6,7 @@ The system is designed to run on a Raspberry 4 with debian linux installed. A ES
 Other requirements are:
 - python 3.10
 - node.js 18
-- npm 22
+- npm 10
 
 
 ## Getting started
@@ -44,4 +44,16 @@ npm run dev
 cd server
 npm install
 npm run dev
+```
+
+### To set up the environment on a Raspberry Pi
+
+1. git clone this repository
+2. transmit the overlay tiles via ftp
+
+```shell
+sudo apt-get update
+sudo apt-get update
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 ```
