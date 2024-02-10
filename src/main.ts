@@ -143,7 +143,8 @@ const fetchFlights = async () => {
     east: bounds.getEast()
   };
   console.log(bound);
-  const flights = (await fetch('http://localhost:3000/api/flights', {
+  const baseURL = window.location.hostname;
+  const flights = (await fetch(`http://${baseURL}:3000/api/flights`, {
     body: JSON.stringify(bound),
     method: 'POST',
     headers: {
