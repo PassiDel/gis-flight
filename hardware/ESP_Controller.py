@@ -10,7 +10,7 @@ import platform
 
 class ESP_Controller(Singleton):
 
-    MSG_SENDING_DELAY = 0.0025  # seconds
+    MSG_SENDING_DELAY = 0.0018  # seconds
     last_sending = time.time()
     print_updated_pixels_every = 5
     last_update = 0
@@ -23,7 +23,7 @@ class ESP_Controller(Singleton):
             log.info("Serial in Mac usage")
             cls.connection = serial.Serial('/dev/cu.usbserial-0001', 460800)
         else:
-            cls.connection = serial.Serial('/dev/ttyUSB0', 460800)
+            cls.connection = serial.Serial('/dev/serial0', 460800)  # hardware serial via GPIO 14 and 15
         log.info("Serial connection established, waiting for setup")
         time.sleep(0.5)
 
@@ -55,7 +55,7 @@ class ESP_Controller(Singleton):
         while self.connection.in_waiting > 0:
             # Read the available data and print it
             data = self.connection.readline().decode('utf-8').strip()
-            log.debug(f"Serial received: {data}")
+            log.info(f"Serial received: {data}")
 
     def empty_update_chain(self):
         log.info("Emptying update chain ...")

@@ -31,7 +31,7 @@ class Plane(CanvasObject):
         super().__init__(flight.latitude, flight.longitude)
         self.altitude = int(flight.get_altitude().rstrip(" ft"))
         self.heading = int(flight.get_heading().rstrip("°"))
-        self.heading_x, self.heading_y = Coord2PixelConverter().convert_heading2xy_vector(self.heading)
+        # self.heading_x, self.heading_y = Coord2PixelConverter().convert_heading2xy_vector(self.heading)
         self.speed = int(flight.get_ground_speed().rstrip(" kts"))
         self.flight: FlightRadar24.Flight = flight
         self.last_positions = last_positions if last_positions is not None else []

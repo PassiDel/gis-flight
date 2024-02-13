@@ -1,53 +1,87 @@
-import math
+import json
+from pyproj import Transformer
 
 from Logger import Logger as log
 from Singleton import Singleton
 from model.Canvas import Canvas
 
+GEOJSON_FILE = "../src/grid.geojson"
+def get_utm_from_geojson(x, y):
+    with open(GEOJSON_FILE, 'r') as file:
+        geojson = json.load(file)
+        for feature in geojson.get('features', []):
+            if feature.get('properties', {}).get('x') == x and feature.get('properties', {}).get('y') == y:
+                return feature.get('geometry', {}).get('coordinates')[0]
+        return None
+def extract_epsg():
+    with open(GEOJSON_FILE, 'r') as file:
+        geojson = json.load(file)
+        crs = geojson.get('crs')
+        if crs:
+            # Extract the name property within the CRS which contains the EPSG code
+            crs_name = crs.get('properties', {}).get('name')
+            if crs_name and 'EPSG' in crs_name:
+                # Extract the EPSG code from the name
+                epsg_code = crs_name.split('::')[-1]
+                return epsg_code
+        return None
+
 
 class Coord2PixelConverter(Singleton):
-    x_min = 6.45  #6.63  # long
-    x_max = 11.18 #11.63  # long
-    y_min = 51.1 #51.05  # lat
-    y_max = 55.05  #55.2  # lat
+    canvas_width = Canvas().get_width()
+    canvas_height = Canvas().get_height()
 
+    # get the corners in UTM from geojson files
+    _south_west = get_utm_from_geojson(0,0)[0]  # furthest corner is (min, min) UTM
+    _north_east = get_utm_from_geojson(canvas_width-1,canvas_height-1)[2]  # furthest corner is (max, max) UTM
+    x_min = _south_west[0] #6.45  # long
+    x_max = _north_east[0] #11.18  # long
+    y_min = _south_west[1] #51.1  # lat
+    y_max = _north_east[1] #55.05  # lat
+
+    # get epsg from geojson
+    _epsg = extract_epsg()
+    log.info(f"Extracted EPSG zone from geojson: {_epsg}")
+    # Create a transformer from WGS84 to the extracted UTM zone
+    _transformer = Transformer.from_crs("epsg:4326", f"epsg:{_epsg}", always_xy=True)
+    _reverse_transformer = Transformer.from_crs(f"epsg:{_epsg}", "epsg:4326", always_xy=True)
+
+    # attributes of the matrix panel (canvas)
     _strip_order = [0, 2, 1, 3, 4, 6, 5, 7, 8, 10, 9]
     _strip_rotations = [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0]
     _pixels_per_row = 512
     _amount_pixels = 5632
 
-    canvas_width = Canvas().get_width()
-    canvas_height = Canvas().get_height()
+    def convert_latlong2utm(self, lat, long):
+        easting, northing = self._transformer.transform(long, lat)
+        return easting, northing
 
-    def convert_latlong2xy(self, lat, long, flip=True) -> tuple[int, int]:
-        # convert
-        y_result = round(((lat - self.y_min) * Canvas().get_height()) / (self.y_max - self.y_min))
-        x_result = round(((long - self.x_min) * Canvas().get_width()) / (self.x_max - self.x_min))
-        y_result = Canvas().get_height() - y_result
+    def convert_utm2latlong(self, easting, northing):
+        lat, long = self._reverse_transformer.transform(easting, northing)
+        return lat, long
+
+    def convert_latlong2xy(self, lat, long, flip=False) -> tuple[int, int]:
+        # convert to utm
+        easting, northing = self.convert_latlong2utm(lat, long)
+        # get x and y on canvas based on UTM
+        y_result = round(((northing - self.y_min) * self.canvas_height) / (self.y_max - self.y_min))
+        x_result = round(((easting - self.x_min) * self.canvas_width) / (self.x_max - self.x_min))
+        y_result = self.canvas_height - y_result
         # check out of bounds
-        if 0 > x_result or x_result >= Canvas().get_width() or 0 > y_result or y_result >= Canvas().get_height():
+        if 0 > x_result or x_result >= self.canvas_width or 0 > y_result or y_result >= self.canvas_height:
             log.debug(f"Converted xy value out of bounds: ({x_result},{y_result})")
             return -1, -1
         else:
             if flip:
-                return Canvas().get_width() - x_result, Canvas().get_height() - y_result
+                return self.canvas_width - x_result, self.canvas_height - y_result
             else:
                 return x_result, y_result
 
     def test_lat_long(self, lat, long) -> bool:
-        if self.y_min <= lat <= self.y_max and self.x_min <= long <= self.x_max:
+        easting, northing = self.convert_latlong2utm(lat, long)
+        if self.y_min <= northing <= self.y_max and self.x_min <= easting <= self.x_max:
             return True
         return False
-
-    def convert_heading2xy_vector(self, heading) -> tuple[int, int]:
-        if heading < 0 or heading > 360: raise ValueError(f"Heading {heading} is not between 0 and 360 degrees")
-        conversion_dict = {
-            22.5: (0,-1), 67.5: (1,-1), 112.5: (1,0),
-            157.5: (1,1), 202.5: (0,1), 247.5: (-1,1),
-            292.5: (-1,0), 337.5: (-1,-1), 361: (0,-1)
-        }
-        for threshold, result in conversion_dict.items():
-            if heading < threshold: return result
 
     def convert_xy2strip_index(self, x, y) -> int:
         zig_zag = x % 2
@@ -68,3 +102,5 @@ class Coord2PixelConverter(Singleton):
         if index > self._amount_pixels:
             raise IndexError(f"Pixelindex {index} is out of bounds on strip")
         return index
+
+

@@ -1,6 +1,5 @@
 import time
 
-from archive.CitiesParser import CitiesParser
 from ESP_Controller import ESP_Controller
 from FlightRadarConnector import FlightRadarConnector
 from model.Canvas import Canvas
@@ -44,26 +43,11 @@ class ICAO_Controller(Singleton):
 
         # Canvas().set_all_pixels((30,30,30))
 
-        if self.show_cities:
-            cities = CitiesParser().get_cities()
-            for city in cities:
-               city.print()
-            if True:
-                CitiesParser().get_city("Wilhelmshaven").print_point()
-                CitiesParser().get_city("Flensburg").print_point()
-                CitiesParser().get_city("Kiel").print_point()
-                CitiesParser().get_city("Dingelstädt").print_point()
-                CitiesParser().get_city("Nordhorn").print_point()
-                CitiesParser().get_city("Dannenberg").print_point()
-                CitiesParser().get_city("Bremen").print_point()
-
         if self.show_planes:
             planes = FlightRadarConnector().get_planes()
             log.info(f"Planes found: {len(planes)}")
             for plane in planes:
                 plane.print()
-
-
 
 
 if __name__ == '__main__':
