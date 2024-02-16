@@ -19,7 +19,8 @@ class FlightRadarConnector(Singleton):
         cls.planes: list[Plane] = []
 
     def get_bounds_str(self):
-        return f"{coords.y_max},{coords.y_min},{coords.x_min},{coords.x_max}"
+        x_min, y_min, x_max, y_max = coords().get_bounds()
+        return f"{y_max},{y_min},{x_min},{x_max}"
 
     def get_planes(self) -> list[Plane]:
         flights = self.fr_api.get_flights(bounds=self.get_bounds_str())

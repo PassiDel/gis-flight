@@ -23,6 +23,7 @@ class ICAO_Controller(Singleton):
 
     def run(self):
         counter = 0
+        self.esp_controller.set_wait_time(0)
         while True:
             try:
                 interval = self.first_interval if counter < 2 else self.update_interval
@@ -37,11 +38,12 @@ class ICAO_Controller(Singleton):
                 Canvas().reset_all_pixels()
                 self.esp_controller.empty_update_chain()
                 self.esp_controller.close()
+                break
 
     def update(self):
         Canvas().reset_all_pixels()
 
-        # Canvas().set_all_pixels((30,30,30))
+        # Canvas().set_all_pixels((10,10,10))
 
         if self.show_planes:
             planes = FlightRadarConnector().get_planes()

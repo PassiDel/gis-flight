@@ -8,7 +8,7 @@ class Canvas(Singleton):
     _height = 88
     _y_start_of_double_layered_zone = 42
     _height_of_double_layered_zone = 4
-    _dim_scale_double_layered_zone = 1.8
+    _dim_scale_double_layered_zone = 2
     _dim_factor_double_layered_zone_additive = 1.8
     pixels = None
 
@@ -31,6 +31,7 @@ class Canvas(Singleton):
         except IndexError as e:
             log.debug(f"Cannot set Pixel ({x},{y}): out of range of Canvas!")
 
+    # Attention: time consuming function for 5632 entries
     def get_pixels_with_update_pending(self) -> list:
         out = []
         for x in range(self._width):

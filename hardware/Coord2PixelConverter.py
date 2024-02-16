@@ -1,50 +1,30 @@
 import json
-from pyproj import Transformer
+from shapely.geometry import shape, Point
+from shapely.ops import nearest_points
+import rtree
 
 from Logger import Logger as log
 from Singleton import Singleton
 from model.Canvas import Canvas
 
 GEOJSON_FILE = "../src/grid.geojson"
-def get_utm_from_geojson(x, y):
-    with open(GEOJSON_FILE, 'r') as file:
-        geojson = json.load(file)
-        for feature in geojson.get('features', []):
-            if feature.get('properties', {}).get('x') == x and feature.get('properties', {}).get('y') == y:
-                return feature.get('geometry', {}).get('coordinates')[0]
-        return None
-def extract_epsg():
-    with open(GEOJSON_FILE, 'r') as file:
-        geojson = json.load(file)
-        crs = geojson.get('crs')
-        if crs:
-            # Extract the name property within the CRS which contains the EPSG code
-            crs_name = crs.get('properties', {}).get('name')
-            if crs_name and 'EPSG' in crs_name:
-                # Extract the EPSG code from the name
-                epsg_code = crs_name.split('::')[-1]
-                return epsg_code
-        return None
-
 
 class Coord2PixelConverter(Singleton):
     canvas_width = Canvas().get_width()
     canvas_height = Canvas().get_height()
 
-    # get the corners in UTM from geojson files
-    _south_west = get_utm_from_geojson(0,0)[0]  # furthest corner is (min, min) UTM
-    _north_east = get_utm_from_geojson(canvas_width-1,canvas_height-1)[2]  # furthest corner is (max, max) UTM
-    x_min = _south_west[0] #6.45  # long
-    x_max = _north_east[0] #11.18  # long
-    y_min = _south_west[1] #51.1  # lat
-    y_max = _north_east[1] #55.05  # lat
-
-    # get epsg from geojson
-    _epsg = extract_epsg()
-    log.info(f"Extracted EPSG zone from geojson: {_epsg}")
-    # Create a transformer from WGS84 to the extracted UTM zone
-    _transformer = Transformer.from_crs("epsg:4326", f"epsg:{_epsg}", always_xy=True)
-    _reverse_transformer = Transformer.from_crs(f"epsg:{_epsg}", "epsg:4326", always_xy=True)
+    # initialize the geojson file
+    log.info("Parsing geojson file ...")
+    with open(GEOJSON_FILE, 'r') as f:
+        _geojson = json.load(f)
+    # Create spatial index
+    _geo_index = rtree.index.Index()
+    for idx, feature in enumerate(_geojson['features']):
+        geom = shape(feature['geometry'])
+        _geo_index.insert(idx, geom.bounds)
+    # init the bounds
+    x_min, x_max, y_min, y_max = None, None, None, None
+    log.info("... geojson parsing done")
 
     # attributes of the matrix panel (canvas)
     _strip_order = [0, 2, 1, 3, 4, 6, 5, 7, 8, 10, 9]
@@ -52,35 +32,69 @@ class Coord2PixelConverter(Singleton):
     _pixels_per_row = 512
     _amount_pixels = 5632
 
-    def convert_latlong2utm(self, lat, long):
-        easting, northing = self._transformer.transform(long, lat)
-        return easting, northing
+    def get_bounds(self):
+        if self.x_min is None:
+            north_east = self._get_polygon_points_by_xy(self.canvas_width-1, self.canvas_height-1) # start at 0
+            south_west = self._get_polygon_points_by_xy(0,0)
+            if north_east is None or south_west is None:
+                raise TypeError("Geojson file does not contain polygons that correspond to canvas maxima!")
+            self.x_max, self.y_max = north_east[2] # top right corner of polygon
+            self.x_min, self.y_min = south_west[0] # bottom left corner of polygon
+        return self.x_min, self.y_min, self.x_max, self.y_max
 
-    def convert_utm2latlong(self, easting, northing):
-        lat, long = self._reverse_transformer.transform(easting, northing)
-        return lat, long
+    # Function to find the polygon containing a specific point
+    def _find_polygon(self, long, lat):
+        point = Point(long, lat)
+        for idx in self._geo_index.intersection((long, lat, long, lat)):
+            if shape(self._geojson['features'][idx]['geometry']).contains(point):
+                return (
+                    self._geojson['features'][idx]['properties']['x'],
+                    self._geojson['features'][idx]['properties']['y']
+                )
+        return None
 
-    def convert_latlong2xy(self, lat, long, flip=False) -> tuple[int, int]:
-        # convert to utm
-        easting, northing = self.convert_latlong2utm(lat, long)
-        # get x and y on canvas based on UTM
-        y_result = round(((northing - self.y_min) * self.canvas_height) / (self.y_max - self.y_min))
-        x_result = round(((easting - self.x_min) * self.canvas_width) / (self.x_max - self.x_min))
-        y_result = self.canvas_height - y_result
-        # check out of bounds
-        if 0 > x_result or x_result >= self.canvas_width or 0 > y_result or y_result >= self.canvas_height:
-            log.debug(f"Converted xy value out of bounds: ({x_result},{y_result})")
+    def _find_closest_polygon(self, long, lat):
+        point = Point(long, lat)
+        min_distance = None
+        closest_polygon = None
+        closest_xy = None
+
+        # find the nearest polygon
+        for idx in self._geo_index.nearest((long, lat, long, lat), 1):  # Adjust the number of nearest neighbors as needed
+            polygon = shape(self._geojson['features'][idx]['geometry'])
+            nearest_point = nearest_points(point, polygon)[1]
+            distance = point.distance(nearest_point)
+
+            if min_distance is None or distance < min_distance:
+                min_distance = distance
+                closest_polygon = polygon
+                closest_xy = self._geojson['features'][idx]['properties']['x'], self._geojson['features'][idx]['properties']['y']
+
+        log.info(f"Found closest polygon for ({long},{lat}) -> xy:{closest_xy} with distance {min_distance}. {closest_polygon}")
+        return closest_xy
+
+    def _get_polygon_points_by_xy(self, x, y):
+        for feature in self._geojson['features']:
+            if feature['properties'].get('x') == x and feature['properties'].get('y') == y:
+                polygon = shape(feature['geometry'])
+                # Accessing the exterior coordinates of the polygon
+                return list(polygon.exterior.coords)
+        return None
+
+    def convert_latlong2xy(self, lat, long) -> tuple[int, int]:
+        result = self._find_polygon(long, lat)
+        if result is None:
+            log.warning(f"Coordinates ({long},{lat}) out of bounds!")
             return -1, -1
-        else:
-            if flip:
-                return self.canvas_width - x_result, self.canvas_height - y_result
-            else:
-                return x_result, y_result
+            # alternative: get the closest polygon
+            # result = self._find_closest_polygon(long, lat)
+        x_result, y_result = result
+        # flip x sides
+        return self.canvas_width-1 - x_result, y_result
 
     def test_lat_long(self, lat, long) -> bool:
-        easting, northing = self.convert_latlong2utm(lat, long)
-        if self.y_min <= northing <= self.y_max and self.x_min <= easting <= self.x_max:
-            return True
+        result = self.convert_latlong2xy(lat, long)
+        if result != (-1, -1): return True
         return False
 
     def convert_xy2strip_index(self, x, y) -> int:
@@ -102,5 +116,3 @@ class Coord2PixelConverter(Singleton):
         if index > self._amount_pixels:
             raise IndexError(f"Pixelindex {index} is out of bounds on strip")
         return index
-
-
