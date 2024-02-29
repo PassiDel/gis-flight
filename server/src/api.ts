@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { fetchFlight, fetchFromRadar } from 'flightradar24-client';
 import { streamSSE } from 'hono/streaming';
 import { Flight, hooks } from './hook.js';
+import { influxDB } from './influx.js';
 
 const api = new Hono();
 
@@ -83,5 +84,91 @@ export const api_routes = api
           await stream.sleep(100);
         }
       });
+    }
+  )
+  .post(
+    '/trails',
+    zValidator(
+      'json',
+      z.object({
+        west: z.number(),
+        east: z.number(),
+        north: z.number(),
+        south: z.number()
+      })
+    ),
+    async (c) => {
+      const data = c.req.valid('json');
+
+      const queryClient = influxDB.getQueryApi('gis');
+      const query = `import "experimental/geo"
+
+from(bucket: "data")
+    |> range(start: -1m)
+    |> geo.shapeData(latField: "latitude", lonField: "longitude", level: 10)
+    |> geo.filterRows(region: { minLat: ${data.south}, maxLat: ${data.north}, minLon: ${data.west}, maxLon: ${data.east} }, strict: true)`;
+      const flights = await queryClient
+        .collectRows(query, (values, tableMeta) => {
+          const {
+            _time,
+            altitude,
+            bearing,
+            callsign,
+            destination,
+            flight,
+            lat,
+            lon,
+            origin,
+            registration,
+            speed
+          } = tableMeta.toObject(values);
+          return {
+            _time,
+            altitude,
+            bearing,
+            callsign,
+            destination,
+            flight,
+            lat,
+            lon,
+            origin,
+            registration,
+            speed
+          };
+        })
+        .catch(() => [])
+        .then((res) =>
+          res.reduce(
+            (flights, r) => {
+              const { flight, lat, lon, altitude, speed, bearing, _time } = r;
+              const pos = { lat, lon, altitude, speed, bearing, time: _time };
+              const fId = flights.findIndex((f) => f.flight === flight);
+              if (fId < 0) {
+                flights.push({
+                  flight,
+                  pos: [pos]
+                });
+                return flights;
+              }
+
+              flights[fId].pos.push(pos);
+
+              return flights;
+            },
+            [] as {
+              flight: string;
+              pos: {
+                lat: number;
+                lon: number;
+                speed: number;
+                bearing: number;
+                altitude: number;
+                time: string;
+              }[];
+            }[]
+          )
+        );
+
+      return c.json(flights);
     }
   );
