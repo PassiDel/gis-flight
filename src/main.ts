@@ -2,188 +2,125 @@ import './style.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import 'leaflet-rotatedmarker';
-import 'leaflet-easybutton';
+import 'Leaflet.MultiOptionsPolyline';
+import type { Flight } from '../server/src/hook.ts';
+import type { Trails } from '../server/src/api.ts';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import { flightToMarker, getPolyline, renderPopup } from './utils.ts';
+import { aeroBase, aeroOverlay, Circles, oepnv, osm, zimt } from './layers.ts';
 
-import grid from './grid.geojson?raw';
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl;
 
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution:
-    'Kartendaten &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Mitwirkende'
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow
 });
 
-const oepnv = L.tileLayer(
-  'https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
-  {
-    attribution:
-      'Kartendaten &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Mitwirkende'
-  }
-);
-
-const aero = L.tileLayer('overlay/{z}/{x}/{y}.png', {
-  attribution:
-    '<a href="https://www.openflightmaps.org/copyright">OpenFlightMap</a>',
-  maxZoom: 11,
-  minZoom: 4
-});
-
-const gridLayer = new L.GeoJSON<{ id: number; x: number; y: number }>(
-  JSON.parse(grid) as any,
-  {
-    style: function (_feature) {
-      return {
-        color: 'green'
-      };
-    }
-  }
-).bindPopup(function (layer) {
-  const { x, y } = (layer as any).feature.properties;
-  return `${x} - ${y}`;
-});
 const baseLayers = {
-  // "Mapbox": mapbox,
   OpenStreetMap: osm,
-  ÖPNV: oepnv
+  ÖPNV: oepnv,
+  Aero: aeroBase
 };
 
+const markerGroup = new L.FeatureGroup([]);
+const trailsGroup = new L.FeatureGroup([]);
 const overlays = {
-  VLR: aero,
-  Grid: gridLayer
-  // "Roads": roadsLayer
+  VLR: aeroOverlay,
+  Circles,
+  Trails: trailsGroup,
+  Flights: markerGroup
 };
 
 const map = L.map('app', {
   center: [52.7924386, 9.930284],
   zoom: 8,
   zoomControl: true,
-  layers: [osm, aero]
+  layers: [osm, aeroOverlay]
 });
 
-L.control.layers(baseLayers, overlays).addTo(map);
+const layers = L.control.layers(baseLayers, overlays).addTo(map);
 
-const zimt = new L.LatLng(53.0551608, 8.7835603);
 L.marker(zimt).addTo(map);
-L.circle(zimt, {
-  color: 'green',
-  fillColor: '#00ff3366',
-  fillOpacity: 0.3,
-  radius: 200_000
-}).addTo(map);
 
-L.circle(zimt, {
-  color: 'blue',
-  fillColor: '#3300ff66',
-  fillOpacity: 0.3,
-  radius: 50_000
-}).addTo(map);
-
-L.circle(zimt, {
-  color: 'red',
-  fillColor: '#ff003366',
-  fillOpacity: 0.3,
-  radius: 10_000
-}).addTo(map);
-
-const data = [
-  {
-    id: '32c446ab',
-    registration: 'D-HABV',
-    flight: '',
-    callsign: 'LOKI18',
-    origin: '',
-    destination: '',
-    latitude: 52.6388,
-    longitude: 13.3216,
-    altitude: 1275,
-    bearing: 265,
-    speed: 98,
-    rateOfClimb: 128,
-    isOnGround: false,
-    squawkCode: '',
-    model: 'EC35',
-    modeSCode: '3DD2CF',
-    radar: 'F-EDDT2',
-    isGlider: false,
-    timestamp: 1699526792
-  }
-];
-
-// TODO: get type from d.ts and remove const data
-function flightsToMarker(flights: typeof data) {
-  return flights.map((f) => {
-    return L.marker([f.latitude, f.longitude], {
-      rotationAngle: f.bearing,
-      attribution:
-        '<a href="https://www.vecteezy.com/free-png/symbol">Symbol PNGs by Vecteezy</a>',
-      icon: L.icon({
-        iconUrl: 'public/plane.png',
-        iconSize: [38 * 2, 32 * 2],
-        className: 'plane'
-      })
-    }).bindPopup(
-      `${f.registration}: ${f.origin} - ${f.destination}\n${JSON.stringify(
-        f,
-        undefined,
-        2
-      )}`
-    );
-  });
-}
-
-const markerGroup = new L.FeatureGroup(flightsToMarker(data));
+const baseURL = window.location.hostname;
 
 markerGroup.addTo(map);
 
-const fetchFlights = async () => {
-  const bounds = map.getBounds();
+const flights = new Map<string, L.Marker>();
+const trails = new Map<string, L.MultiOptionsPolyline>();
 
-  const bound = {
-    north: bounds.getNorth(),
-    west: bounds.getWest(),
-    south: bounds.getSouth(),
-    east: bounds.getEast()
-  };
-  console.log(bound);
-  const baseURL = window.location.hostname;
-  const flights = (await fetch(`http://${baseURL}:3000/api/flights`, {
-    body: JSON.stringify(bound),
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
+// Start SSE Stream
+const evtSource = new EventSource(
+  `http://${baseURL}:3000/api/sse?detailed=true`
+);
+
+evtSource.addEventListener('time-update', (event: MessageEvent<string>) => {
+  const data = JSON.parse(event.data) as Flight[];
+  data.forEach((f) => {
+    if (!trails.has(f.id)) {
+      const trail = getPolyline([]);
+      trail.addTo(trailsGroup);
+      trails.set(f.id, trail);
     }
-  }).then((b) => b.json())) as typeof data;
-  markerGroup.clearLayers();
-  flightsToMarker(flights).forEach((m) => markerGroup.addLayer(m));
-
-  console.table(flights);
-};
-map.on('moveend', fetchFlights);
-
-await fetchFlights();
-
-let interval: number = 0;
-
-L.easyButton({
-  states: [
-    {
-      stateName: 'enable-rt',
-      icon: '<span class="star">🛫</span>',
-      title: 'Enable real-time',
-      onClick: function (btn) {
-        // and its callback
-        interval = setInterval(fetchFlights, 1500);
-
-        btn.state('disable-rt');
-      }
-    },
-    {
-      stateName: 'disable-rt',
-      icon: '<span class="star">🛬</span>',
-      title: 'Disable real-time',
-      onClick: function (btn) {
-        clearInterval(interval);
-
-        btn.state('enable-rt');
-      }
+    // Update trail with the latest position
+    const trail = trails.get(f.id)!!;
+    trail.setLatLngs([
+      ...trail.getLatLngs(),
+      new L.LatLng(f.latitude, f.longitude, f.altitude)
+    ]);
+    if (!flights.has(f.id)) {
+      const marker = flightToMarker(f);
+      marker.addTo(markerGroup);
+      flights.set(f.id, marker);
+      return;
     }
-  ]
-}).addTo(map);
+    // Update Plane marker with the latest position
+    const flightMarker = flights.get(f.id)!!;
+    flightMarker.setLatLng([f.latitude, f.longitude]);
+    flightMarker.setRotationAngle(f.bearing);
+    flightMarker.setPopupContent(renderPopup(f));
+  });
+  // Remove every Plane marker not in the area anymore
+  flights.forEach((marker, id) => {
+    if (data.findIndex((d) => d.id === id)) {
+      return;
+    }
+    flights.delete(id);
+    markerGroup.removeLayer(marker);
+  });
+});
+
+// Load last 10min of trails
+fetch(`http://${baseURL}:3000/api/trails`)
+  .then<Trails>((b) => b.json())
+  .then((t) => {
+    t.forEach((f) => {
+      const line = getPolyline(f.pos);
+      line.addTo(trailsGroup);
+      trails.set(f.flight, line);
+    });
+  });
+
+// Lazy-load grid
+import('./grid.geojson?raw')
+  .then((g) => g.default)
+  .then((g) => {
+    const grid = new L.GeoJSON<{ id: number; x: number; y: number }>(
+      JSON.parse(g) as any,
+      {
+        style: function (_feature) {
+          return {
+            color: 'green'
+          };
+        }
+      }
+    ).bindPopup(function (layer) {
+      const { x, y } = (layer as any).feature.properties;
+      return `${x} - ${y}`;
+    });
+    layers.addOverlay(grid, 'Grid');
+  });

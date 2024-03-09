@@ -16,28 +16,29 @@ setInterval(async () => {
   const flights = await fetchFromRadar(north, west, south, east);
   await hooks.callHook('data', flights);
   console.log('data', flights.length);
-  // TODO: set timer
-}, 10_000);
+}, 5_000);
 
-hooks.hook('data', async (flights) => {
-  const writeClient = influxDB.getWriteApi('gis', 'data');
+if (process.arch === 'x64') {
+  hooks.hook('data', async (flights) => {
+    const writeClient = influxDB.getWriteApi('gis', 'data');
 
-  const points = flights.map((f) => {
-    return new Point('flight')
-      .tag('flight', f.id)
-      .tag('callsign', f.callsign)
-      .tag('origin', f.origin)
-      .tag('destination', f.destination)
-      .tag('registration', f.registration)
-      .timestamp(new Date(f.timestamp * 1000))
-      .floatField('latitude', f.latitude)
-      .floatField('longitude', f.longitude)
-      .floatField('altitude', f.altitude)
-      .floatField('bearing', f.bearing)
-      .floatField('speed', f.speed);
+    const points = flights.map((f) => {
+      return new Point('flight')
+        .tag('flight', f.id)
+        .tag('callsign', f.callsign || '')
+        .tag('origin', f.origin || '')
+        .tag('destination', f.destination || '')
+        .tag('registration', f.registration || '')
+        .timestamp(new Date((f.timestamp || 0) * 1000))
+        .floatField('latitude', f.latitude)
+        .floatField('longitude', f.longitude)
+        .floatField('altitude', f.altitude)
+        .floatField('bearing', f.bearing)
+        .floatField('speed', f.speed);
+    });
+
+    writeClient.writePoints(points);
+    await writeClient.flush();
+    await writeClient.close();
   });
-
-  writeClient.writePoints(points);
-  await writeClient.flush();
-  await writeClient.close();
-});
+}

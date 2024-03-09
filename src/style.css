@@ -17,3 +17,12 @@ body {
 .star {
   font-size: xx-large;
 }
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 8px;
+}
+.list > :nth-child(odd) {
+  font-style: oblique;
+}
