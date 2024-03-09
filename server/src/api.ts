@@ -108,11 +108,8 @@ export const api_routes = api
   })
   .get('/flight/:id', async (c) => {
     const { id } = c.req.param();
-    console.log(id, await fetchFlight(id));
 
-    return c.json({
-      success: true
-    });
+    return c.json(await fetchFlight(id));
   })
   .get(
     '/sse',
@@ -130,7 +127,6 @@ export const api_routes = api
         let keepRunning = true;
 
         const unregister = hooks.hook('data', async (flights) => {
-          console.log(id, flights.length);
           messages.push(flights);
         });
         await stream.onAbort(() => {
@@ -164,5 +160,6 @@ export const api_routes = api
   .get('/trails', async (c) => {
     const flights = await fetchTrailsFromDB();
 
+    c.res.headers.set('cache-control', 'max-age=5');
     return c.json(flights);
   });
