@@ -57,7 +57,7 @@ sudo apt-get update
 sudo apt-get update
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
-pip install Shapely, Rtree
+pip install Shapely, Rtree, aiohttp
 sudo apt-get install -y libopenblas-base
 sudo apt-get install -y libspatialindex-dev
 ```
@@ -71,4 +71,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart gis-flight-server.service
 sudo systemctl restart gis-flight-frontend.service
 sudo systemctl restart gis-flight-hardware.service
+sudo systemctl enable gis-flight-server.service
+sudo systemctl enable gis-flight-frontend.service
+sudo systemctl enable gis-flight-hardware.service
 ```
