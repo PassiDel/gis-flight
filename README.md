@@ -35,6 +35,7 @@ It should look something like this:
 
 ```shell
 npm install
+npm run build
 npm run dev
 ```
 
@@ -56,7 +57,21 @@ sudo apt-get update
 sudo apt-get update
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
-pip install Shapely, Rtree
+pip install Shapely, Rtree, aiohttp
 sudo apt-get install -y libopenblas-base
 sudo apt-get install -y libspatialindex-dev
+```
+
+### To set up the services for startup
+```shell
+sudo cp hardware/service/gis-flight-server.service /etc/systemd/system/gis-flight-server.service
+sudo cp hardware/service/gis-flight-frontend.service /etc/systemd/system/gis-flight-frontend.service
+sudo cp hardware/service/gis-flight-hardware.service /etc/systemd/system/gis-flight-hardware.service
+sudo systemctl daemon-reload
+sudo systemctl restart gis-flight-server.service
+sudo systemctl restart gis-flight-frontend.service
+sudo systemctl restart gis-flight-hardware.service
+sudo systemctl enable gis-flight-server.service
+sudo systemctl enable gis-flight-frontend.service
+sudo systemctl enable gis-flight-hardware.service
 ```
