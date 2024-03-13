@@ -38,7 +38,7 @@ class Plane(CanvasObject):
         self.last_positions = last_positions if last_positions is not None else []
         self.last_update = datetime.now()
         self.x, self.y = Coord2PixelConverter().convert_latlong2xy(self.center_lat, self.center_long)
-        self.aircraft_type = "GLID" if json_data["isGlider"] else "NA"
+        self.aircraft_type = "NA" #"GLID" if json_data["isGlider"] else "NA"
 
     def __str__(self):
         return f"Plane {self.id} type={self.aircraft_type} pos=({self.x},{self.y}) alt={self.altitude} speed={self.speed}"
