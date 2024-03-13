@@ -1,7 +1,5 @@
 from datetime import datetime
 
-import FlightRadar24
-
 from Coord2PixelConverter import Coord2PixelConverter
 from model.Canvas import Canvas
 from model.CanvasObject import CanvasObject
@@ -27,20 +25,23 @@ class Plane(CanvasObject):
         450: 0.05
     }
 
-    def __init__(self, flight: FlightRadar24.Flight, last_positions=None):
-        super().__init__(flight.latitude, flight.longitude)
-        self.altitude = int(flight.get_altitude().rstrip(" ft"))
-        self.heading = int(flight.get_heading().rstrip("°"))
-        # self.heading_x, self.heading_y = Coord2PixelConverter().convert_heading2xy_vector(self.heading)
-        self.speed = int(flight.get_ground_speed().rstrip(" kts"))
-        self.flight: FlightRadar24.Flight = flight
+    def __init__(self, json_data:dict, last_positions=None):
+        """
+
+        :param json_data: example {'altitude': 2850, 'latitude': 52.328, 'longitude': 10.86, 'speed': 164, 'id': '34510073'}
+        :param last_positions:
+        """
+        super().__init__(json_data["latitude"], json_data["longitude"])
+        self.altitude = json_data["altitude"]
+        self.speed = json_data["speed"]
+        self.id = json_data["id"]
         self.last_positions = last_positions if last_positions is not None else []
         self.last_update = datetime.now()
         self.x, self.y = Coord2PixelConverter().convert_latlong2xy(self.center_lat, self.center_long)
-        self.aircraft_type = flight.aircraft_code
+        self.aircraft_type = "GLID" if json_data["isGlider"] else "NA"
 
     def __str__(self):
-        return f"Plane {self.flight.callsign} type={self.aircraft_type} pos=({self.x},{self.y}) alt={self.altitude} speed={self.speed}"
+        return f"Plane {self.id} type={self.aircraft_type} pos=({self.x},{self.y}) alt={self.altitude} speed={self.speed}"
 
     def print(self):
         log.debug(f"printing {self}")
@@ -56,17 +57,17 @@ class Plane(CanvasObject):
                         Canvas().set_pixel(self.last_positions[i][0], self.last_positions[i][1], self.color, dim_scale=data[1])
                         # Canvas().set_pixel(self.x - (i + 1) * self.heading_x, self.y - (i + 1) * self.heading_y, dim_tuple)
 
-    def update_if_match(self, flight: FlightRadar24.Flight) -> bool:
-        if self.flight.callsign != flight.callsign: return False
+    def update_if_match(self, json_data) -> bool:
+        if self.id != json_data["id"]: return False
         last_position = (self.x, self.y)
-        self.__init__(flight, self.last_positions)
+        self.__init__(json_data, self.last_positions)
         current_position = (self.x, self.y)
         self.last_update = datetime.now()
         if current_position != last_position and last_position not in self.last_positions:
             self.last_positions.insert(0, last_position)
             if len(self.last_positions) > self.max_buffer_length:
                 self.last_positions = self.last_positions[:self.max_buffer_length]
-            log.debug(f"{self.flight.callsign}: Added old position {last_position}. Backlog={len(self.last_positions)}")
+            log.debug(f"{self.id}: Added old position {last_position}. Backlog={len(self.last_positions)}")
         return True
 
     def altitude_to_red_green_spectrum(self):

@@ -2,7 +2,13 @@ from qgis.core import QgsProject, QgsRectangle, QgsVectorLayer, QgsFeature, QgsG
 from qgis.PyQt.QtCore import QVariant
 import itertools
 from pyproj import Transformer
+import statistics
+from math import sin, cos, atan2, radians, degrees
 
+# Define grid dimensions (columns x rows)
+grid_dimensions = (64, 88)  # Adjusted to 0-indexed (63,87) as the maximum
+wgs84_epsg = "EPSG:4326"
+map_epsg = "EPSG:25832"  # LCC:"EPSG:5243"
 
 # Define cities with x, y (grid coordinates) and longitude, latitude
 # long, lat from https://www.findlatitudeandlongitude.com/find-latitude-and-longitude-from-address/
@@ -20,60 +26,64 @@ cities = {
 }
 
 # Transformer for coordinate conversion
-transformer = Transformer.from_crs("EPSG:4326", "EPSG:25832", always_xy=True)
+# EPSG:5243 is given in Easting, Northing which corresponds to x and y coordinate
+transformer = Transformer.from_crs(wgs84_epsg, map_epsg, always_xy=True)
 
-# Convert geographic coordinates to UTM
+# Convert geographic coordinates to LCC
 for city, data in cities.items():
     data['utm_x'], data['utm_y'] = transformer.transform(data['long'], data['lat'])
 
-# Function to calculate the distance between two points in grid space
-def calculate_distance(city1, city2):
+# Function to calculate the distance and angle between two points in both systems
+def calculate_distance_and_angle(city1, city2):
+    # Projected coordinate system differences
     utm_x_distance = abs(city1['utm_x'] - city2['utm_x'])
     utm_y_distance = abs(city1['utm_y'] - city2['utm_y'])
+    # Grid coordinate system differences
     grid_x_distance = abs(city1['x'] - city2['x'])
     grid_y_distance = abs(city1['y'] - city2['y'])
-    return utm_x_distance, utm_y_distance, grid_x_distance, grid_y_distance
-
-# Function to calculate mean spacing
-def calculate_mean_spacing(cities):
-    total_x_spacing, total_y_spacing, total_pairs = 0, 0, 0
-
-    for (name1, city1), (name2, city2) in itertools.combinations(cities.items(), 2):
-        x_dist, y_dist, grid_x_dist, grid_y_dist = calculate_distance(city1, city2)
-        
-        # Avoid division by zero for cities at the same grid position
-        if grid_x_dist != 0 and grid_y_dist != 0:
-            x_spacing = x_dist / grid_x_dist
-            y_spacing = y_dist / grid_y_dist
-            print(f"{name1}-{name2} x={x_spacing} y={y_spacing}")
-            total_x_spacing += x_spacing
-            total_y_spacing += y_spacing
-            total_pairs += 1
-
-    mean_x_spacing = total_x_spacing / total_pairs
-    mean_y_spacing = total_y_spacing / total_pairs
-    print(f"Mean: x={x_spacing} y={y_spacing}")
     
-    return mean_x_spacing, mean_y_spacing
+    # Calculate distances
+    proj_distance = (utm_x_distance**2 + utm_y_distance**2)**0.5
+    grid_distance = (grid_x_distance**2 + grid_y_distance**2)**0.5
+    
+    # Calculate angles in radians and convert to degrees
+    proj_angle = degrees(atan2(utm_y_distance, utm_x_distance))
+    grid_angle = degrees(atan2(grid_y_distance, grid_x_distance))
+    
+    # Calculate rotation angle
+    rotation_angle = proj_angle - grid_angle
+    
+    return proj_distance, grid_distance, rotation_angle
 
-# Define grid dimensions (columns x rows)
-grid_dimensions = (64, 88)  # Adjusted to 0-indexed (63,87) as the maximum
+# Function to calculate mean spacing and mean rotation angle
+def calculate_mean_spacing_and_rotation(cities):
+    cosines = []
+    sines = []
+    spacings = []
+    total_pairs = 0
+    
+    for (name1, city1), (name2, city2) in itertools.combinations(cities.items(), 2):
+        proj_distance, grid_distance, rotation_angle = calculate_distance_and_angle(city1, city2)
+        if grid_distance != 0:
+            spacing = proj_distance / grid_distance
+            spacings.append(spacing)
+            # Convert angle to radians for trigonometric functions
+            angle_rad = radians(rotation_angle)
+            cosines.append(cos(angle_rad))
+            sines.append(sin(angle_rad))
+            total_pairs += 1
+            print(f"{name1}-{name2} spacing:{spacing} sin={sin(angle_rad)} cos={cos(angle_rad)}")
+    
+    mean_spacing = statistics.mean(spacings)
+    # Calculate mean angle from vectors
+    mean_cosine = statistics.mean(cosines)
+    mean_sine = statistics.mean(sines)
+    mean_rotation_angle = degrees(atan2(mean_sine, mean_cosine))
 
-# calculate mean spacing from all the cities
-x_spacing, y_spacing = calculate_mean_spacing(cities)
-
-# Create a memory layer to store the grid
-grid_layer = QgsVectorLayer(f"Polygon?crs=EPSG:25832", "GridLayer", "memory")
-provider = grid_layer.dataProvider()
-provider.addAttributes([QgsField("id", QVariant.Int), QgsField("x", QVariant.Int), QgsField("y", QVariant.Int), QgsField("calibration", QVariant.Bool)])
-grid_layer.updateFields()
-
-# pick the most middle city to make calculations from, so errors are highest on the edges
-origin_city = cities["Petershagen"]
-
-# Calculate the lower left corner of the grid based on the origin city
-min_utm_x = origin_city['utm_x'] - origin_city['x'] * x_spacing
-min_utm_y = origin_city['utm_y'] - origin_city['y'] * y_spacing
+    print(f"Mean: spacing={mean_spacing} angle={mean_rotation_angle} pairs={total_pairs}")
+    print(f"Spacing: min={min(spacings)} max={max(spacings)} st_dev={statistics.stdev(spacings)}")
+    
+    return mean_spacing, mean_rotation_angle
 
 # Function to check if a grid cell corresponds to a city
 def is_calibration_cell(x, y, cities):
@@ -82,25 +92,58 @@ def is_calibration_cell(x, y, cities):
             return True
     return False
 
+# Function to rotate a point around another point by a given angle
+def rotate_point(origin, point, angle):
+    angle_rad = radians(angle)
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + cos(angle_rad) * (px - ox) - sin(angle_rad) * (py - oy)
+    qy = oy + sin(angle_rad) * (px - ox) + cos(angle_rad) * (py - oy)
+    return qx, qy
+
+# calculate mean spacing from all the cities
+mean_spacing, mean_rotation_angle = calculate_mean_spacing_and_rotation(cities)
+
+# Create a memory layer to store the grid
+grid_layer = QgsVectorLayer(f"Polygon?crs={map_epsg}", "GridLayer", "memory")
+provider = grid_layer.dataProvider()
+provider.addAttributes([QgsField("id", QVariant.Int), QgsField("x", QVariant.Int), QgsField("y", QVariant.Int), QgsField("calibration", QVariant.Bool)])
+grid_layer.updateFields()
+
+# pick the most middle city to make calculations from, so errors are highest on the edges
+origin_city = cities["Petershagen"]
+# Use the origin city's UTM coordinates as the rotation origin
+origin_x, origin_y = origin_city['utm_x'], origin_city['utm_y']
+
+# Calculate the lower left corner of the grid based on the origin city
+min_utm_x = origin_city['utm_x'] - origin_city['x'] * mean_spacing
+min_utm_y = origin_city['utm_y'] - origin_city['y'] * mean_spacing
+print(f"minimum UTM: x={min_utm_x} y={min_utm_y}")
+
 # Create grid cells and add to the layer
 id = 0
 for x in range(grid_dimensions[0]):
     for y in range(grid_dimensions[1]):
-        # Calculate the center of the rectangle
-        center_x = min_utm_x + x * x_spacing
-        center_y = min_utm_y + y * y_spacing
+        # Calculate the center of the rectangle without rotation
+        center_x = min_utm_x + x * mean_spacing
+        center_y = min_utm_y + y * mean_spacing
 
-        # Offset the corners from the center
+        # Rotate the center point around the origin city
+        rotated_center_x, rotated_center_y = rotate_point((origin_x, origin_y), (center_x, center_y), mean_rotation_angle)
+        # print(f"rotated {center_x},{center_y} to {rotated_center_x},{rotated_center_y}")
+        
+        # Offset the corners from the rotated center to create the rectangle
         rect = QgsRectangle(
-            center_x - x_spacing / 2,
-            center_y - y_spacing / 2,
-            center_x + x_spacing / 2,
-            center_y + y_spacing / 2
+            rotated_center_x - mean_spacing / 2,
+            rotated_center_y - mean_spacing / 2,
+            rotated_center_x + mean_spacing / 2,
+            rotated_center_y + mean_spacing / 2
         )
 
+        # Create and add the feature as before
         feature = QgsFeature()
         feature.setGeometry(QgsGeometry.fromRect(rect))
-        #y_corrected = grid_dimensions[1] - y
         calibration_flag = is_calibration_cell(x, y, cities)
         feature.setAttributes([id, x, y, calibration_flag])
         provider.addFeature(feature)
