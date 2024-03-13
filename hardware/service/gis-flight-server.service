@@ -1,0 +1,14 @@
+[Unit]
+Description=GIS Flight Server
+After=network.target
+
+[Service]
+Environment="PATH=/usr/local/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WorkingDirectory=/home/pi/gis-flight/server
+ExecStart=/usr/bin/npm run dev
+Restart=always
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target

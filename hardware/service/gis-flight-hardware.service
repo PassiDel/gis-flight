@@ -1,0 +1,14 @@
+[Unit]
+Description=GIS Flight Hardware
+After=network.target
+
+[Service]
+Environment="PATH=/usr/local/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WorkingDirectory=/home/pi/gis-flight/hardware
+ExecStart=/usr/bin/python3 ICAO_Controller.py
+Restart=always
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target
