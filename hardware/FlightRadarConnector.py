@@ -57,14 +57,20 @@ class FlightRadarConnector(Singleton):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
-                        async for line in response.content:
-                            if line:
-                                data = line.decode('utf-8')
-                                if data.startswith('data:'):
-                                    json_data = json.loads(data.replace('data: ', ''))
-                                    await self._parse_planes(json_data)
-                break  # Exit the loop if connection is successful
+                        try:
+                            async for line in response.content:
+                                try:
+                                    if line:
+                                        data = line.decode('utf-8')
+                                        if data.startswith('data:'):
+                                            json_data = json.loads(data.replace('data: ', ''))
+                                            await self._parse_planes(json_data)
+                                except Exception as stream_error:
+                                    log.error(f"Error during SSE stream processing: {stream_error}, reconnecting...")
+                                    break  # Exit the inner loop to reconnect
+                        except (aiohttp.http_exceptions.TransferEncodingError, aiohttp.client_exceptions.ClientPayloadError) as e:
+                            log.error(f"Error during SSE stream processing: {e}, reconnecting...")
             except aiohttp.client_exceptions.ClientConnectorError:
                 log.error(f"Connection failed, retrying in {self.retry_after_connection_lost_sec} seconds...")
-                await asyncio.sleep(self.retry_after_connection_lost_sec)
+            await asyncio.sleep(self.retry_after_connection_lost_sec)
 
