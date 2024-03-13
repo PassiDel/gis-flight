@@ -17,7 +17,7 @@
     "@influxdata/influxdb-client": "^1.33.2",
     "@tsconfig/node18": "^18.2.2",
     "@types/node": "^20.9.0",
-    "flightradar24-client": "^1.0.1",
+    "@puazzi/flightradar24-client": "^1.0.4",
     "hono": "^3.9.2",
     "hookable": "^5.5.3",
     "tsx": "^4.0.0",

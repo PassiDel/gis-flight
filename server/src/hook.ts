@@ -1,5 +1,5 @@
 import { createHooks } from 'hookable';
-import { fetchFromRadar } from 'flightradar24-client';
+import { fetchFromRadar } from '@puazzi/flightradar24-client';
 import { influxDB } from './influx.js';
 import { Point } from '@influxdata/influxdb-client';
 

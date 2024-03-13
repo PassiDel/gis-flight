@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { fetchFlight, fetchFromRadar } from 'flightradar24-client';
+import { fetchFlight, fetchFromRadar } from '@puazzi/flightradar24-client';
 import { streamSSE } from 'hono/streaming';
 import { Flight, hooks } from './hook.js';
 import { influxDB } from './influx.js';
